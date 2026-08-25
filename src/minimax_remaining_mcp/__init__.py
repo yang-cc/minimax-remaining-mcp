@@ -1,4 +1,4 @@
-"""minimax-remaining-mcp 鈥?MCP server for the MiniMax Token Plan.
+"""minimax-remaining-mcp — MCP server for the MiniMax Token Plan.
 
 Provides tools for AI agents to:
 
@@ -15,16 +15,17 @@ Design notes
 
 - Camoufox keeps a persistent Firefox profile at ``data/profile/`` so
   the session cookies survive MCP server restarts. The browser is only
-  launched for a fresh login 鈥?never on the hot path.
+  launched for a fresh login — never on the hot path.
 - The Coding Plan API has no Bearer-key auth path. The web console's
   ``api_key`` field is not a Coding Plan subscription key (it returns
   ``base_resp = {2062, "no active token plan"}``). Only the web
   session cookies work.
-- The 5h window is a **fixed** window aligned to Beijing time 鈥?typical
-  boundaries are 10:00 / 15:00 / 20:00 CST etc. (per the official
-  Token Plan docs: "濂楅鍐呴搴﹀彈 5 灏忔椂鍥哄畾绐楀彛鍜屽懆绐楀彛鎺у埗"). Unused quota
+- The 5h window is a **fixed** window aligned to Beijing time — typical
+  boundaries are 00:00 / 05:00 / 10:00 / 15:00 / 20:00 CST etc.
+  (per the official Token Plan docs:
+  "套餐内额度受 5 小时固定窗口和周窗口控制"). Unused quota
   does **not** roll over to the next cycle.
 - All persistent state lives as plain JSON in ``data/``. No database.
 """
 
-__version__ = "0.1.2"
+__version__ = "0.1.3"

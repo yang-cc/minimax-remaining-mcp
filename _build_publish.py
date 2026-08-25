@@ -25,7 +25,7 @@ SRC_PKG = ROOT / "src" / "minimax_remaining_mcp"
 DIST = ROOT / "dist"
 NAME = "minimax-remaining-mcp"  # PyPI name (with hyphens)
 IMPORT_NAME = "minimax_remaining_mcp"  # Python import name (underscored)
-VERSION = "0.1.2"
+VERSION = "0.1.3"
 
 
 # ----------------------------------------------------------------------
