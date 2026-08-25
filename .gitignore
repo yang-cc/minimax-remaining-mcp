@@ -47,6 +47,11 @@ htmlcov/
 # Build-time scratch (uv cache, temp staging dirs)
 .cache/
 .tmp/
+.build-tmp/
+
+# pip install --force-reinstall extraction artifacts
+# (e.g. minimax_remaining_mcp-0.1.2/ left over from a wheel install)
+minimax_remaining_mcp-*/
 
 # Project runtime state (NEVER commit — contains session cookies)
 data/
