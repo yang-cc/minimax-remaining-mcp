@@ -207,13 +207,21 @@ def build_sdist() -> Path:
     # underscores (the Python import form), not hyphens. The internal
     # top-level directory can use either form; we keep the PyPI name
     # (hyphens) for readability.
-    archive_name = f"{NAME}-{VERSION}"  # internal dir: minimax-remaining-mcp-0.1.1/
-    tar_name = f"{IMPORT_NAME}-{VERSION}.tar.gz"  # file: minimax_remaining_mcp-0.1.1.tar.gz
+    archive_name = f"{NAME}-{VERSION}"  # internal dir: minimax-remaining-mcp-0.1.3/
+    tar_name = f"{IMPORT_NAME}-{VERSION}.tar.gz"  # file: minimax_remaining_mcp-0.1.3.tar.gz
     out_path = DIST / tar_name
+
+    # PKG-INFO is required by PyPI for sdist uploads. We reuse the same
+    # metadata we emit into the wheel's METADATA so the two stay in sync.
+    pkg_info_bytes = build_metadata()
+    # PKG-INFO uses the same email-headers format as METADATA (PEP 566 /
+    # 621). No special transformation needed.
+    pkg_info_path_in_sdist = f"{archive_name}/PKG-INFO"
 
     members: list[tuple[Path, str]] = []
     for fname in REPO_FILES:
         members.append((ROOT / fname, f"{archive_name}/{fname}"))
+    members.append((None, pkg_info_path_in_sdist))  # placeholder, see below
     # Whole src tree, minus egg-info and __pycache__
     for p in (ROOT / "src").rglob("*"):
         if p.is_dir():
@@ -226,8 +234,9 @@ def build_sdist() -> Path:
         members.append((p, f"{archive_name}/src/{rel.as_posix()}"))
 
     with tarfile.open(out_path, "w:gz", format=tarfile.PAX_FORMAT) as tf:
-        for src, arc in members:
-            data = src.read_bytes()
+        for entry in members:
+            src, arc = entry
+            data = pkg_info_bytes if src is None else src.read_bytes()
             info = tarfile.TarInfo(name=arc)
             info.size = len(data)
             info.mode = 0o644
