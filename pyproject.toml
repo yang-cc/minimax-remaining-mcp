@@ -1,0 +1,81 @@
+[project]
+name = "minimax-remaining-mcp"
+version = "0.1.0"
+description = "MCP server for the MiniMax Token Plan. Tells your AI agent when to pause."
+
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+keywords = ["mcp", "minimax", "token-plan", "quota", "agent", "camoufox", "deepseek-harness"]
+authors = [
+    { name = "yang-cc" },
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
+dependencies = [
+    "camoufox[geoip]>=0.5",
+    "fastmcp>=0.4",
+    "playwright>=1.40",
+    "requests>=2.30",
+    "pydantic>=2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21",
+    "ruff>=0.4",
+]
+
+[project.scripts]
+# After `pip install minimax-remaining-mcp` you can run `minimax-mcp`
+# from any shell. The MCP client typically launches the server via
+# `python -m minimax_remaining_mcp.server` instead — see README.
+minimax-mcp = "minimax_remaining_mcp.server:main"
+
+[project.urls]
+Homepage = "https://github.com/yang-cc/minimax-remaining-mcp"
+Issues = "https://github.com/yang-cc/minimax-remaining-mcp/issues"
+Repository = "https://github.com/yang-cc/minimax-remaining-mcp"
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+minimax_remaining_mcp = ["py.typed"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "B",    # flake8-bugbear
+    "UP",   # pyupgrade
+    "N",    # pep8-naming
+    "SIM",  # flake8-simplify
+]
+ignore = [
+    "E501",  # line too long (we use 100, but allow longer for URLs/comments)
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"

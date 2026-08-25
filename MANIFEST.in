@@ -1,0 +1,25 @@
+include README.md
+include LICENSE
+include pyproject.toml
+include .env.example
+
+# Include the marker file but not the contents of those dirs.
+include src/minimax_remaining_mcp/py.typed
+
+# Always exclude runtime state — these must never be shipped in the wheel
+# or sdist.
+recursive-exclude data *
+recursive-exclude .git *
+recursive-exclude .venv *
+recursive-exclude __pycache__ *
+recursive-exclude *.egg-info *
+recursive-exclude dist *
+recursive-exclude build *
+
+# Don't ship editor / OS junk.
+global-exclude *.pyc
+global-exclude *.pyo
+global-exclude *.swp
+global-exclude *.swo
+global-exclude .DS_Store
+global-exclude Thumbs.db
