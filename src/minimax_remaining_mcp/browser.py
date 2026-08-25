@@ -166,12 +166,59 @@ async def _wait_for_login(
     raise PlaywrightTimeoutError(f"No login detected within {timeout}s")
 
 
-async def smoke_test(cfg: AppConfig) -> dict[str, Any]:
-    """Launch Camoufox headlessly, load example.com, return title. No persistence."""
+async def smoke_test(cfg: AppConfig, *, timeout_seconds: float = 30.0) -> dict[str, Any]:
+    """Launch Camoufox headlessly, load example.com, return title. No persistence.
+
+    Wrapped in an overall timeout so the caller never hangs indefinitely
+    even if the underlying browser driver hangs (e.g. due to a sandboxed
+    parent process). A 30 s default is plenty for a cold launch on a
+    normal machine.
+    """
+    import asyncio
     from camoufox.async_api import AsyncCamoufox
 
-    async with AsyncCamoufox(headless=True, humanize=True) as browser:
-        page = await browser.new_page()
-        await page.goto("https://example.com", wait_until="domcontentloaded", timeout=20000)
-        title = await page.title()
-        return {"ok": True, "title": title}
+    async def _go() -> dict[str, Any]:
+        async with AsyncCamoufox(headless=True, humanize=True) as browser:
+            page = await browser.new_page()
+            await page.goto(
+                "https://example.com",
+                wait_until="domcontentloaded",
+                timeout=20000,
+            )
+            title = await page.title()
+            return {"ok": True, "title": title}
+
+    try:
+        return await asyncio.wait_for(_go(), timeout=timeout_seconds)
+    except asyncio.TimeoutError:
+        return {
+            "ok": False,
+            "error": "TimeoutError",
+            "message": (
+                f"Camoufox did not finish example.com load within {timeout_seconds}s. "
+                "If running inside a sandbox (e.g. DSH pwsh / read-only mode) the "
+                "Playwright driver pipe creation may be denied (WinError 5 / "
+                "PermissionError). Try running outside the sandbox or use the "
+                "dedicated Python interpreter directly."
+            ),
+        }
+    except PermissionError as e:
+        return {
+            "ok": False,
+            "error": "PermissionError",
+            "message": (
+                f"PermissionError spawning the browser subprocess: {e}. "
+                "This typically happens when the parent process cannot create "
+                "anonymous pipes (WinError 5). Common causes: Windows Defender "
+                "Controlled Folder Access, sandboxed shells (DSH pwsh, codex), "
+                "or restrictive process token. Run from an unconstrained shell "
+                "to verify, or call minimax_login() directly which uses a "
+                "slightly different launch path."
+            ),
+        }
+    except Exception as e:  # noqa: BLE001
+        return {
+            "ok": False,
+            "error": type(e).__name__,
+            "message": str(e)[:500],
+        }

@@ -21,14 +21,40 @@ def _detect_camoufox_os() -> str:
     return "linux"
 
 
-# Default locations (overridable). The data dir defaults to a folder
-# named ``data`` next to the package source so it works portably on
-# Windows, macOS, and Linux. Override with the ``MINIMAX_DATA_DIR`` env
-# var if you want state stored elsewhere.
-_PACKAGE_ROOT = Path(__file__).resolve().parent.parent.parent
-DEFAULT_DATA_DIR = Path(
-    os.environ.get("MINIMAX_DATA_DIR", str(_PACKAGE_ROOT / "data"))
-)
+def _default_data_dir() -> Path:
+    """Pick a portable default data directory.
+
+    Override with the ``MINIMAX_DATA_DIR`` env var if you want state
+    stored elsewhere.
+
+    Why not "next to the package source"?
+    ------------------------------------
+    When installed via ``pip install minimax-remaining-mcp`` the
+    package lives in ``site-packages/minimax_remaining_mcp/`` and
+    ``Path(__file__).resolve().parent.parent.parent`` would resolve
+    to ``<venv>/Lib`` (or the system ``Lib``), which is the wrong
+    place to persist user state — it would put ``data/`` *inside*
+    the venv and get wiped on the next ``pip install``.
+
+    So instead we use the per-platform user-data convention, which
+    is stable for both editable (``pip install -e .``) and installed
+    layouts and across machine moves.
+    """
+    env = os.environ.get("MINIMAX_DATA_DIR")
+    if env:
+        return Path(env)
+
+    if sys.platform.startswith("win"):
+        base = Path(os.environ.get("LOCALAPPDATA") or os.path.expanduser("~"))
+        return base / "minimax-remaining-mcp" / "data"
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support" / "minimax-remaining-mcp" / "data"
+    # Linux / other Unix: XDG_DATA_HOME or ~/.local/share.
+    base = Path(os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"))
+    return base / "minimax-remaining-mcp" / "data"
+
+
+DEFAULT_DATA_DIR = _default_data_dir()
 DEFAULT_PROFILE_DIR = DEFAULT_DATA_DIR / "profile"
 
 # MiniMax web + API endpoints (CN endpoints)
