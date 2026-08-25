@@ -1,4 +1,4 @@
-﻿"""minimax-remaining-mcp 鈥?MCP server for the MiniMax Token Plan.
+"""minimax-remaining-mcp 鈥?MCP server for the MiniMax Token Plan.
 
 Provides tools for AI agents to:
 
@@ -27,4 +27,4 @@ Design notes
 - All persistent state lives as plain JSON in ``data/``. No database.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"

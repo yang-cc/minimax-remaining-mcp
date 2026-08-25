@@ -144,6 +144,18 @@ remaining_percent_5h >= 30 → should_pause=false → 可以继续调用
 | `minimax_info()` | 静态配置 + 最近一次会话元数据。 |
 | `minimax_clear(confirm=True)` | 清空 cookies / session / window 状态。 |
 
+### ⚠️ 首次冷启动（Camoufox）会比较慢
+
+`minimax_smoke()` 和 `minimax_login()` 第一次启动 Camoufox 时，需要解压
+持久化的 Firefox profile、初始化 sqlite 数据库、加载扩展等，通常需要
+**30-90 秒**（视磁盘速度而定）。**这是 Camoufox 冷启动的正常表现，不是
+bug**——后续启动会复用 `data/profile/` 里的缓存，秒级完成。
+
+如果首次调用超过了你的 MCP 客户端 `toolCallTimeoutMs`（DSH 默认 180s）
+而被中止，**重试一次即可看到结果**。如果你预计会频繁冷启动（例如在
+CI 里跑），可以把对应 MCP 客户端的 `toolCallTimeoutMs` 调到 300000（5
+分钟）。
+
 ### `minimax_status()` 响应示例
 
 实际诊断输出(当 5h 窗口已耗尽、应触发暂停时):
