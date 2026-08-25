@@ -156,67 +156,100 @@ def register_tools(mcp: Any, cfg: AppConfig) -> None:
         window_state = get_or_create_window(cfg, _WindowStoreShim(cfg))
         ws = to_status(window_state)
 
-        # --- 1. Primary: Coding Plan remains (5h window percent) -----
+        # --- 1. Console first: package totals + group_id -----------------
+        # The /backend/account/token_plan_credit endpoint only needs the
+        # ``_token`` cookie, so it works on a fresh login (before the
+        # ``minimax_group_id_v2`` cookie is necessarily set). It also
+        # returns ``credit_packages_details[0].group_id`` which we
+        # need to query the /coding_plan/remains endpoint.
+        console_err: str | None = None
+        console_payload: dict[str, Any] | None = None
+        console_usage: dict[str, Any] | None = None
+        try:
+            console_payload = await asyncio.to_thread(
+                fetch_usage_console, cfg, cookie_store
+            )
+            console_usage = parse_usage_console(console_payload)
+            _persist_session_from_console(session_store, console_usage)
+        except Exception as e:  # noqa: BLE001
+            console_err = type(e).__name__ + ": " + str(e)[:300]
+            log.warning("Console path failed: %s", e)
+
+        # Resolve group_id: console response wins (most recent), then
+        # session.json cache (set by previous successful console call),
+        # then None (coding_plan will fall back to cookie itself).
+        cookies = cookie_store.load()
+        cookie_gid = next(
+            (c.value for c in cookies if c.name == "minimax_group_id_v2"), None
+        )
+        cached_gid = session_store.load().group_id
+        group_id = (
+            (console_usage or {}).get("group_id")
+            or cached_gid
+            or cookie_gid
+        )
+
+        # --- 2. Primary: Coding Plan remains (5h window percent) -----
         coding_plan_err: str | None = None
         usage: dict[str, Any] | None = None
         try:
-            payload = await asyncio.to_thread(fetch_coding_plan_remains, cfg, cookie_store)
+            payload = await asyncio.to_thread(
+                fetch_coding_plan_remains,
+                cfg,
+                cookie_store,
+                group_id=group_id,
+            )
             usage = parse_coding_plan_remains(payload)
             usage_cache.save({"source": "coding_plan", "data": usage})
             _touch_session(session_store, "ok")
         except Exception as e:  # noqa: BLE001
             coding_plan_err = type(e).__name__ + ": " + str(e)[:300]
-            log.warning("coding_plan path failed: %s. Will fill in package data from console_api.", e)
+            log.warning("coding_plan path failed: %s", e)
 
-        # --- 2. Supplementary: console / token_plan_credit (package totals) ---
-        # Always call this when the primary path failed, so we still have
-        # package-level credits to show. Even when primary succeeds, we
-        # merge package info so the agent sees one unified view.
-        try:
-            console_payload = await asyncio.to_thread(fetch_usage_console, cfg, cookie_store)
-            console_usage = parse_usage_console(console_payload)
-            if usage is None:
-                # coding_plan didn't work — surface what we have.
-                usage_cache.save({"source": "console_api", "data": console_usage})
-                _touch_session(session_store, "ok")
-                return _build_status_payload(
-                    cfg,
-                    usage=console_usage,
-                    window_status=ws,
-                    source="console_api",
-                    note=(
-                        "coding_plan/remains unavailable; showing package-level "
-                        "totals only (no 5h window percent). "
-                        + (coding_plan_err or "")
-                    ).strip(),
-                )
-            # Merge package info into the coding_plan view.
+        if usage is None and console_usage is None:
+            # Both paths failed.
+            err = coding_plan_err or console_err or "unknown"
+            return _build_status_payload(
+                cfg,
+                usage=None,
+                window_status=ws,
+                source="coding_plan",
+                error=err,
+                note=(
+                    "Both coding_plan and console_api failed. Cookies likely "
+                    "expired — call minimax_login() to refresh, then retry."
+                ),
+            )
+
+        if usage is None and console_usage is not None:
+            # coding_plan didn't work — surface what we have.
+            usage_cache.save({"source": "console_api", "data": console_usage})
+            _touch_session(session_store, "ok")
+            return _build_status_payload(
+                cfg,
+                usage=console_usage,
+                window_status=ws,
+                source="console_api",
+                note=(
+                    "coding_plan/remains unavailable; showing package-level "
+                    "totals only (no 5h window percent). "
+                    + (coding_plan_err or "")
+                ).strip(),
+            )
+
+        if usage is not None and console_usage is not None:
+            # Both worked: merge package info into the coding_plan view
+            # so the agent sees one unified response.
             for k in (
                 "total_credits", "used_credits", "remaining_credits",
                 "user_name", "group_id", "package_name",
                 "package_expiration_iso",
             ):
-                if console_usage.get(k) is not None and (usage.get(k) is None or usage.get(k) == 0):
+                if console_usage.get(k) is not None and (
+                    usage.get(k) is None or usage.get(k) == 0
+                ):
                     usage[k] = console_usage.get(k)
             _touch_session(session_store, "ok")
-        except Exception as e:  # noqa: BLE001
-            log.warning("Console path also failed: %s", e)
-            if usage is None:
-                # Both paths failed.
-                err = coding_plan_err or (type(e).__name__ + ": " + str(e)[:200])
-                return _build_status_payload(
-                    cfg,
-                    usage=None,
-                    window_status=ws,
-                    source="coding_plan",
-                    error=err,
-                    note=(
-                        "Both coding_plan and console_api failed. Cookies likely "
-                        "expired — call minimax_login() to refresh, then retry."
-                    ),
-                )
-            # Primary path worked; console failed. Use primary as-is.
-            log.info("Primary coding_plan path OK; console supplement failed (non-fatal).")
 
         return _build_status_payload(
             cfg, usage=usage, window_status=ws, source="coding_plan"
@@ -396,6 +429,30 @@ def _touch_session(session_store: SessionStore, status: str) -> None:
     if info.logged_in and not info.user_name:
         # Already logged in, no name captured
         pass
+    session_store.save(info)
+
+
+def _persist_session_from_console(
+    session_store: SessionStore, console_usage: dict[str, Any]
+) -> None:
+    """Persist group_id, user_name, and login_at from a console_api response.
+
+    The /backend/account/token_plan_credit response carries the same
+    group_id that the /coding_plan/remains endpoint requires as a query
+    parameter. We cache it in session.json so a subsequent coding_plan
+    call can find it even if the ``minimax_group_id_v2`` cookie is
+    missing from the persisted browser cookies.
+    """
+    info = session_store.load()
+    gid = console_usage.get("group_id")
+    uname = console_usage.get("user_name")
+    if gid:
+        info.group_id = gid
+    if uname:
+        info.user_name = uname
+    info.logged_in = True
+    info.last_status = "ok"
+    info.last_query_at = _utc_now_iso()
     session_store.save(info)
 
 

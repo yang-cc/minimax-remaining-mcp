@@ -243,6 +243,8 @@ def parse_usage_console(payload: dict[str, Any]) -> dict[str, Any]:
 def fetch_coding_plan_remains(
     cfg: AppConfig,
     cookie_store: CookieStore,
+    *,
+    group_id: str | None = None,
 ) -> dict[str, Any]:
     """Query the Coding Plan remains endpoint using web session cookies.
 
@@ -255,16 +257,31 @@ def fetch_coding_plan_remains(
     On failure, the full response body is saved to
     ``<data_dir>/last_coding_plan_failure.json`` for diagnosis, then
     RuntimeError is raised.
+
+    Group ID resolution order:
+      1. Explicit ``group_id`` argument (preferred — usually the one
+         the caller just got from ``/backend/account/token_plan_credit``).
+      2. The ``minimax_group_id_v2`` cookie, if present.
+      3. Otherwise: raise so the caller can decide whether to fall
+         back to console_api only.
     """
     cookies = cookie_store.load()
     if not cookies:
         raise RuntimeError("No persisted cookies. Call minimax_login() first.")
 
-    gid_cookie = next((c for c in cookies if c.name == "minimax_group_id_v2"), None)
-    group_id = gid_cookie.value if gid_cookie else ""
+    if not group_id:
+        gid_cookie = next(
+            (c for c in cookies if c.name == "minimax_group_id_v2"), None
+        )
+        group_id = gid_cookie.value if gid_cookie else ""
     if not group_id:
         raise RuntimeError(
-            "No minimax_group_id_v2 cookie. Re-login to capture group_id."
+            "group_id not provided and minimax_group_id_v2 cookie is missing. "
+            "The coding_plan/remains endpoint requires it. Either re-login in "
+            "Camoufox (which should set the cookie), or call minimax_status() "
+            "twice — the first call hits /backend/account/token_plan_credit "
+            "(works with just the _token cookie) and persists group_id to "
+            "session.json, the second call uses that."
         )
 
     # Headers aligned with the user's confirmed browser capture for the
